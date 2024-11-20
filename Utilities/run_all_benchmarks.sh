@@ -25,25 +25,25 @@ fi
 
 # List of benchmarks to run
 BENCHMARKS=(
-    # bwaves_s
-    # lbm_s
-    # wrf_s
-    # cam4_s
-    # nab_s
-    # fotonik3d_s
-    # specrand_fs
-    # mcf_s
-    # x264_s
-    # deepsjeng_s
-    # leela_s
-    # exchange2_s
-    # xz_s
-    # specrand_is
-    # lbm_r
+    bwaves_s
+    wrf_s
+    cam4_s
+    nab_s
+    fotonik3d_s
+    specrand_fs
+    mcf_s
+    x264_s
+    deepsjeng_s
+    leela_s
+    exchange2_s
+    xz_s
+    specrand_is
     sjeng
     astar
     milc
     namd
+    leslie3d
+    lbm
 )
 
 # Function to run a benchmark

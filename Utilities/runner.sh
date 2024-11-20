@@ -1,6 +1,5 @@
 #!/bin/bash
 
-# Used to run a single benchmark with our cpu
 # Usage: ./run_gem5_simulation.sh -b <benchmark_name> -o <output_directory> -n <num_cpus>
 
 # Default values (edit as needed)
