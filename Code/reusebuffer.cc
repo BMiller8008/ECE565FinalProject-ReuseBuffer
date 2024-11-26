@@ -78,9 +78,10 @@ ReuseBuffer::getResults(Addr pc,
                            [&](const Entry& entry) {
                                return isMatch(entry, pc, operands);
                            });
-
+    DPRINTF(IEW, "after it %d", it != buffer.end());
+    DPRINTF(IEW, "it->result_count %d",it->result_count);
     if (it != buffer.end()) {
-        return std::vector<RegVal>(it->results.end() - it->result_count, it->results.end());
+        return std::vector<RegVal>(it->results.begin(), it->results.begin() + it->result_count);
     } else {
         return {}; // Empty vector if not found
     }

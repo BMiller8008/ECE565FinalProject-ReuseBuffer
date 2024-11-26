@@ -1277,16 +1277,12 @@ IEW::executeInsts()
             DPRINTF(IEW, "integer %d and float %d\n",inst->isInteger(),inst->isFloating());
             DPRINTF(IEW, "num source reg %d and num dest regs %d\n",inst->numSrcRegs(),inst->numDestRegs());
             for (int i = 0; i < inst->numSrcRegs(); ++i) {
-                
                 const PhysRegIdPtr reg = inst->renamedSrcIdx(i);
                 DPRINTF(IEW, "source register class renamed type %d.\n", reg->classValue());
-
-                if (reg->is(InvalidRegClass)){
-                    DPRINTF(IEW, "INVALID CLASS\n");
+                if (reg->classValue() == IntRegClass || reg->classValue() == FloatRegClass) {
+                    RegVal val = cpu->getReg(reg);
+                    operand_values.push_back(val);
                 }
-                RegVal val = cpu->getReg(reg);
-                // RegVal val = getRegOperand(inst->staticInst.get(), i);
-                operand_values.push_back(val);
             }
             // Check if the instruction with these operands exists in the reuse buffer
             if (reuseBuffer.contains(inst_addr, operand_values)) {
@@ -1294,11 +1290,17 @@ IEW::executeInsts()
                 DPRINTF(IEW, "[tid:%i] Instruction [sn:%llu] matched in reuse buffer, "
                         "skipping execution.\n", inst->threadNumber, inst->seqNum);
                 std::vector<RegVal> results = reuseBuffer.getResults(inst_addr, operand_values);
-
+                DPRINTF(IEW, "Gets to after results");
                 // Write the result to the destination physical registers
                 for (int i = 0; i < inst->numDestRegs(); ++i) {
+                    DPRINTF(IEW, "Gets to inside for loop");
                     PhysRegIdPtr dest_reg = inst->renamedDestIdx(i);
-                    cpu->setReg(dest_reg, results[i]);
+                    DPRINTF(IEW, "dest register %d.\n", dest_reg->classValue());
+                    if (dest_reg->classValue() == IntRegClass || dest_reg->classValue() == FloatRegClass) {
+                        DPRINTF(IEW, "set reg before");
+                        cpu->setReg(dest_reg, results[i]);
+                        DPRINTF(IEW, "set reg after");
+                    }
                     // Update the scoreboard to mark the register as ready
                     scoreboard->setReg(dest_reg);
                 }
@@ -1336,8 +1338,9 @@ IEW::executeInsts()
                 DPRINTF(IEW, "get results for buffer store\n");
                 for (int i = 0; i < inst->numDestRegs(); ++i) {
                     PhysRegIdPtr dest_reg = inst->renamedDestIdx(i);
-                    DPRINTF(IEW, "Register class renamed type %d.", dest_reg->classValue());
-                    results.push_back(cpu->getReg(dest_reg));
+                    if (dest_reg->classValue() == IntRegClass || dest_reg->classValue() == FloatRegClass) {
+                        results.push_back(cpu->getReg(dest_reg));
+                    }
                 }
 
                 DPRINTF(IEW, "reuse buffer store\n");
