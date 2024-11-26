@@ -2,8 +2,9 @@
  * reuse_buffer.hh
  *
  * Header file for the ReuseBuffer class used in the gem5 O3 CPU model.
- * The ReuseBuffer uses PC and operand values to check for instruction matches
- * and stores the result upon instruction completion, using FIFO replacement.
+ * The ReuseBuffer uses the instruction address (Addr) and operand values
+ * to check for instruction matches and stores the result upon instruction
+ * completion, using FIFO replacement.
  */
 
 #ifndef __REUSE_BUFFER_HH__
@@ -11,11 +12,19 @@
 
 #include <vector>
 #include <deque>
-#include "base/types.hh"        // For types like Addr, RegVal
-#include "base/pcstate.hh"      // For PCStateBase
+#include "base/statistics.hh"
+#include "cpu/o3/comm.hh"
+#include "cpu/o3/dyn_inst_ptr.hh"
+#include "cpu/o3/inst_queue.hh"
+#include "cpu/o3/limits.hh"
+#include "cpu/o3/lsq.hh"
+#include "cpu/o3/scoreboard.hh"
+#include "cpu/timebuf.hh"
+#include "debug/IEW.hh"
+#include "sim/probe/probe.hh"
+#include "cpu/o3/reusebuffer.hh"
 
-// Define the size of the reuse buffer
-#define REUSE_BUFFER_SIZE 128  // Adjust the size as needed
+#define REUSE_BUFFER_SIZE 1024  // Adjust the size as needed
 
 namespace gem5
 {
@@ -28,29 +37,29 @@ class ReuseBuffer
   public:
     // Structure to hold an entry in the reuse buffer
     struct Entry {
-        PCStateBase pc;
+        Addr pc;
         std::vector<RegVal> operands;
         RegVal result;
 
-        Entry(const PCStateBase &pc_state,
+        Entry(Addr pc_addr,
               const std::vector<RegVal> &ops,
               const RegVal &res)
-            : pc(pc_state), operands(ops), result(res) {}
+            : pc(pc_addr), operands(ops), result(res) {}
     };
 
     ReuseBuffer();
     ~ReuseBuffer();
 
     // Check if an instruction with the same PC and operands exists
-    bool contains(const PCStateBase &pc,
+    bool contains(Addr pc,
                   const std::vector<RegVal> &operands) const;
 
     // Get the result of an instruction from the reuse buffer
-    RegVal getResult(const PCStateBase &pc,
+    RegVal getResult(Addr pc,
                      const std::vector<RegVal> &operands) const;
 
     // Insert a new instruction into the reuse buffer
-    void insert(const PCStateBase &pc,
+    void insert(Addr pc,
                 const std::vector<RegVal> &operands,
                 const RegVal &result);
 
@@ -60,7 +69,7 @@ class ReuseBuffer
 
     // Helper function to compare entries
     bool isMatch(const Entry &entry,
-                 const PCStateBase &pc,
+                 Addr pc,
                  const std::vector<RegVal> &operands) const;
 };
 

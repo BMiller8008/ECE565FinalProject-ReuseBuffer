@@ -4,7 +4,7 @@
  * Implementation of the ReuseBuffer class for the gem5 O3 CPU model.
  */
 
-#include "cpu/o3/reuse_buffer.hh"
+#include "cpu/o3/reusebuffer.hh"
 
 #include <algorithm> // For std::find_if, std::any_of
 
@@ -16,15 +16,17 @@ namespace o3
 
 ReuseBuffer::ReuseBuffer()
 {
+    // Constructor logic if needed
 }
 
 ReuseBuffer::~ReuseBuffer()
 {
+    // Destructor logic if needed
 }
 
 bool
 ReuseBuffer::isMatch(const Entry &entry,
-                     const PCStateBase &pc,
+                     Addr pc,
                      const std::vector<RegVal> &operands) const
 {
     if (entry.pc != pc)
@@ -42,7 +44,7 @@ ReuseBuffer::isMatch(const Entry &entry,
 }
 
 bool
-ReuseBuffer::contains(const PCStateBase &pc,
+ReuseBuffer::contains(Addr pc,
                       const std::vector<RegVal> &operands) const
 {
     return std::any_of(buffer.begin(), buffer.end(),
@@ -52,7 +54,7 @@ ReuseBuffer::contains(const PCStateBase &pc,
 }
 
 RegVal
-ReuseBuffer::getResult(const PCStateBase &pc,
+ReuseBuffer::getResult(Addr pc,
                        const std::vector<RegVal> &operands) const
 {
     auto it = std::find_if(buffer.begin(), buffer.end(),
@@ -70,7 +72,7 @@ ReuseBuffer::getResult(const PCStateBase &pc,
 }
 
 void
-ReuseBuffer::insert(const PCStateBase &pc,
+ReuseBuffer::insert(Addr pc,
                     const std::vector<RegVal> &operands,
                     const RegVal &result)
 {
