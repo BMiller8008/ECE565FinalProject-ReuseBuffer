@@ -1268,7 +1268,7 @@ IEW::executeInsts()
         std::vector<RegVal> operand_values;
 
         // **Reuse Buffer Check for Non-Branch Instructions**
-        if (is_non_control) {
+        if (is_non_control && inst->numDestRegs() == 1) {
             // Retrieve operand values
             for (int i = 0; i < inst->numSrcRegs(); ++i) {
                 RegVal val = inst->getRegOperand(inst->staticInst.get(), i);
@@ -1315,7 +1315,7 @@ IEW::executeInsts()
             instToCommit(inst);
 
             // **Add New Entry to the Reuse Buffer After Execution**
-            if (is_non_control && inst->getFault() == NoFault) {
+            if (is_non_control && inst->getFault() == NoFault && inst->numDestRegs() == 1) {
                 // The operand_values vector is already populated if is_non_control is true
                 // Retrieve the result value
                 RegVal result = 0;
