@@ -42,11 +42,7 @@ class ReuseBuffer
     size_t result_count;
 
     Entry(Addr _pc, const std::vector<RegVal>& _operands, const std::vector<RegVal>& _results)
-        : pc(_pc), operands(_operands), result_count(_results.size())
-    {
-        assert(_results.size() <= 2);
-        std::copy(_results.begin(), _results.end(), results.begin());
-    }
+        : pc(_pc), operands(_operands), result_count(_results.size()) {}
     };
 
 

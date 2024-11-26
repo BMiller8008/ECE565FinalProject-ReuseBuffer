@@ -1271,18 +1271,26 @@ IEW::executeInsts()
         std::vector<RegVal> operand_values;
 
         // **Reuse Buffer Check for Non-Branch Instructions**
-        if (is_non_control && inst->numDestRegs() > 0) {
+        if (is_non_control && inst->numDestRegs()>0 && inst->numSrcRegs()>0) {
+            DPRINTF(IEW, "reuse check\n");
             // Retrieve operand values
+            DPRINTF(IEW, "integer %d and float %d\n",inst->isInteger(),inst->isFloating());
+            DPRINTF(IEW, "num source reg %d and num dest regs %d\n",inst->numSrcRegs(),inst->numDestRegs());
             for (int i = 0; i < inst->numSrcRegs(); ++i) {
-                RegVal val = inst->getRegOperand(inst->staticInst.get(), i);
+                
+                const PhysRegIdPtr reg = inst->renamedSrcIdx(i);
+                DPRINTF(IEW, "source register class renamed type %d.\n", reg->classValue());
+
+                if (reg->is(InvalidRegClass)){
+                    DPRINTF(IEW, "INVALID CLASS\n");
+                }
+                RegVal val = cpu->getReg(reg);
+                // RegVal val = getRegOperand(inst->staticInst.get(), i);
                 operand_values.push_back(val);
             }
-
             // Check if the instruction with these operands exists in the reuse buffer
             if (reuseBuffer.contains(inst_addr, operand_values)) {
                 // Reuse buffer hit; retrieve the result
-                // RegVal result = reuseBuffer.getResult(inst_addr, operand_values);
-
                 DPRINTF(IEW, "[tid:%i] Instruction [sn:%llu] matched in reuse buffer, "
                         "skipping execution.\n", inst->threadNumber, inst->seqNum);
                 std::vector<RegVal> results = reuseBuffer.getResults(inst_addr, operand_values);
@@ -1294,7 +1302,8 @@ IEW::executeInsts()
                     // Update the scoreboard to mark the register as ready
                     scoreboard->setReg(dest_reg);
                 }
-
+                if (!inst->readPredicate())
+                    inst->forwardOldRegs();
                 // Mark the instruction as executed and ready to commit
                 inst->setExecuted();
                 instToCommit(inst);
@@ -1320,16 +1329,19 @@ IEW::executeInsts()
             instToCommit(inst);
 
             // **Add New Entry to the Reuse Buffer After Execution**
-            if (is_non_control && inst->getFault() == NoFault && inst->numDestRegs() > 0) {
+            if (is_non_control && inst->getFault() == NoFault && inst->numSrcRegs()>0  && inst->numDestRegs()>0) {
                 // The operand_values vector is already populated if is_non_control is true
                 // Retrieve the result value
                 std::vector<RegVal> results;
+                DPRINTF(IEW, "get results for buffer store\n");
                 for (int i = 0; i < inst->numDestRegs(); ++i) {
                     PhysRegIdPtr dest_reg = inst->renamedDestIdx(i);
+                    DPRINTF(IEW, "Register class renamed type %d.", dest_reg->classValue());
                     results.push_back(cpu->getReg(dest_reg));
                 }
 
-
+                DPRINTF(IEW, "reuse buffer store\n");
+                
                 // Insert the instruction into the reuse buffer
                 reuseBuffer.insert(inst_addr, operand_values, results);
             }

@@ -62,7 +62,7 @@ ReuseBuffer::insert(Addr pc,
     Entry new_entry(pc, operands, results);
 
     // Check if the buffer is full
-    if (buffer.size() >= REUSE_BUFFER_SIZE) {
+    if (!buffer.empty() && buffer.size() >= REUSE_BUFFER_SIZE) {
         buffer.pop_front(); // Remove the oldest entry
     }
 
@@ -80,8 +80,7 @@ ReuseBuffer::getResults(Addr pc,
                            });
 
     if (it != buffer.end()) {
-        return std::vector<RegVal>(it->results.begin(),
-                                   it->results.begin() + it->result_count);
+        return std::vector<RegVal>(it->results.end() - it->result_count, it->results.end());
     } else {
         return {}; // Empty vector if not found
     }
