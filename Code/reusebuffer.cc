@@ -47,6 +47,10 @@ bool
 ReuseBuffer::contains(Addr pc,
                       const std::vector<RegVal> &operands) const
 {
+    DPRINTF(IEW, "OPERANDS EMPTY %d BUFFER EMPYT %d", operands.empty(),buffer.empty());
+    if (buffer.empty() || operands.empty()){
+        return false;
+    }
     return std::any_of(buffer.begin(), buffer.end(),
                        [&](const Entry &entry) {
                            return isMatch(entry, pc, operands);
@@ -78,10 +82,24 @@ ReuseBuffer::getResults(Addr pc,
                            [&](const Entry& entry) {
                                return isMatch(entry, pc, operands);
                            });
-    DPRINTF(IEW, "after it %d", it != buffer.end());
-    DPRINTF(IEW, "it->result_count %d",it->result_count);
+
+    DPRINTF(IEW, "after it %d\n", it != buffer.end());
+    DPRINTF(IEW, "it->result_count %d\n",it->result_count);
+
     if (it != buffer.end()) {
-        return std::vector<RegVal>(it->results.begin(), it->results.begin() + it->result_count);
+        Entry matchedEntry = *it;
+        std::vector<RegVal> regResults;
+        DPRINTF(IEW, "matched entry size %d\n",matchedEntry.result_count);
+        DPRINTF(IEW, "it->results empty? %d\n",matchedEntry.results.empty());
+        DPRINTF(IEW, "regresults1 %lu\n", it->results[0]);
+        for (int i = 0; i < it->result_count; ++i) {
+            DPRINTF(IEW, "GET HERE???????\n");
+            DPRINTF(IEW, "regresults[%d] = %lu\n", i, it->results[i]);
+            regResults.push_back(it->results[i]);
+        }
+        // s = std::vector<RegVal>(it->results.begin(), it->results.begin() + it->result_count);
+        return regResults;
+
     } else {
         return {}; // Empty vector if not found
     }

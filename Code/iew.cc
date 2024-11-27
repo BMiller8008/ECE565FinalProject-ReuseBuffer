@@ -1262,180 +1262,192 @@ IEW::executeInsts()
             }
 
         }
-    else {
-        bool reused = false;
-        Addr inst_addr = inst->pcState().instAddr();
-        //bool is_non_control = !inst->isControl();
-        bool is_non_control = inst->isInteger() || inst->isFloating();
+        else {
+            bool reused = false;
+            Addr inst_addr = inst->pcState().instAddr();
+            //bool is_non_control = !inst->isControl();
+            bool is_non_control = inst->isInteger() || inst->isFloating();
+            bool good = inst->numDestRegs()>0 && inst->numSrcRegs()>0;
+            if (good){
+                for (int i=0; i < inst->numSrcRegs(); i++){
+                    const PhysRegIdPtr reg = inst->renamedSrcIdx(i);
+                    if (!(reg->classValue() == IntRegClass || reg->classValue() == FloatRegClass)){
+                        good = false;
+                        break;
+                    }
+                }
+                for (int i=0; i < inst->numDestRegs(); i++){
+                    const PhysRegIdPtr reg = inst->renamedDestIdx(i);
+                    if (!(reg->classValue() == IntRegClass || reg->classValue() == FloatRegClass)){
+                        good = false;
+                        break;
+                    }
+                }
+            }
+            
+            std::vector<RegVal> operand_values;
 
-        std::vector<RegVal> operand_values;
-
-        // **Reuse Buffer Check for Non-Branch Instructions**
-        if (is_non_control && inst->numDestRegs()>0 && inst->numSrcRegs()>0) {
-            DPRINTF(IEW, "reuse check\n");
-            // Retrieve operand values
-            DPRINTF(IEW, "integer %d and float %d\n",inst->isInteger(),inst->isFloating());
-            DPRINTF(IEW, "num source reg %d and num dest regs %d\n",inst->numSrcRegs(),inst->numDestRegs());
-            for (int i = 0; i < inst->numSrcRegs(); ++i) {
-                const PhysRegIdPtr reg = inst->renamedSrcIdx(i);
-                DPRINTF(IEW, "source register class renamed type %d.\n", reg->classValue());
-                if (reg->classValue() == IntRegClass || reg->classValue() == FloatRegClass) {
+            // **Reuse Buffer Check for Non-Branch Instructions**
+            if (is_non_control && good) {
+                DPRINTF(IEW, "reuse check\n");
+                // Retrieve operand values
+                DPRINTF(IEW, "integer %d and float %d\n",inst->isInteger(),inst->isFloating());
+                DPRINTF(IEW, "num source reg %d and num dest regs %d\n",inst->numSrcRegs(),inst->numDestRegs());
+                for (int i = 0; i < inst->numSrcRegs(); ++i) {
+                    const PhysRegIdPtr reg = inst->renamedSrcIdx(i);
+                    DPRINTF(IEW, "source register class renamed type %d.\n", reg->classValue());
                     RegVal val = cpu->getReg(reg);
                     operand_values.push_back(val);
                 }
-            }
-            // Check if the instruction with these operands exists in the reuse buffer
-            if (reuseBuffer.contains(inst_addr, operand_values)) {
-                // Reuse buffer hit; retrieve the result
-                DPRINTF(IEW, "[tid:%i] Instruction [sn:%llu] matched in reuse buffer, "
-                        "skipping execution.\n", inst->threadNumber, inst->seqNum);
-                std::vector<RegVal> results = reuseBuffer.getResults(inst_addr, operand_values);
-                DPRINTF(IEW, "Gets to after results");
-                // Write the result to the destination physical registers
-                for (int i = 0; i < inst->numDestRegs(); ++i) {
-                    DPRINTF(IEW, "Gets to inside for loop");
-                    PhysRegIdPtr dest_reg = inst->renamedDestIdx(i);
-                    DPRINTF(IEW, "dest register %d.\n", dest_reg->classValue());
-                    if (dest_reg->classValue() == IntRegClass || dest_reg->classValue() == FloatRegClass) {
+                // Check if the instruction with these operands exists in the reuse buffer
+                if (reuseBuffer.contains(inst_addr, operand_values)) {
+                    // Reuse buffer hit; retrieve the result
+                    DPRINTF(IEW, "how many operand values, %d", operand_values.size());
+                    DPRINTF(IEW, "[tid:%i] Instruction [sn:%llu] matched in reuse buffer, "
+                            "skipping execution.\n", inst->threadNumber, inst->seqNum);
+                    std::vector<RegVal> results = reuseBuffer.getResults(inst_addr, operand_values);
+                    DPRINTF(IEW, "Gets to after results");
+                    // Write the result to the destination physical registers
+                    for (int i = 0; i < inst->numDestRegs(); ++i) {
+                        DPRINTF(IEW, "Gets to inside for loop");
+                        PhysRegIdPtr dest_reg = inst->renamedDestIdx(i);
+                        DPRINTF(IEW, "dest register %d.\n", dest_reg->classValue());
                         DPRINTF(IEW, "set reg before");
                         cpu->setReg(dest_reg, results[i]);
                         DPRINTF(IEW, "set reg after");
+                        // Update the scoreboard to mark the register as ready
+                        // scoreboard->setReg(dest_reg);
                     }
-                    // Update the scoreboard to mark the register as ready
-                    scoreboard->setReg(dest_reg);
+                    if (!inst->readPredicate())
+                        inst->forwardOldRegs();
+                    // Mark the instruction as executed and ready to commit
+                    inst->setExecuted();
+                    instToCommit(inst);
+                    activityThisCycle();
+                    reused = true;
+                    ++iewStats.reusedInsts;
                 }
-                if (!inst->readPredicate())
-                    inst->forwardOldRegs();
-                // Mark the instruction as executed and ready to commit
-                inst->setExecuted();
-                instToCommit(inst);
-                activityThisCycle();
-                reused = true;
-                ++iewStats.reusedInsts;
-            }
-        }
-
-        // **Normal Execution Path**
-        if (!reused) {
-            // If the instruction has already faulted, then skip executing it.
-            // Such case can happen when it faulted during ITLB translation.
-            // If we execute the instruction (even if it's a nop) the fault
-            // will be replaced and we will lose it.
-            if (inst->getFault() == NoFault) {
-                inst->execute();
-                if (!inst->readPredicate())
-                    inst->forwardOldRegs();
             }
 
-            inst->setExecuted();
-            instToCommit(inst);
+            // **Normal Execution Path**
+            if (!reused) {
+                // If the instruction has already faulted, then skip executing it.
+                // Such case can happen when it faulted during ITLB translation.
+                // If we execute the instruction (even if it's a nop) the fault
+                // will be replaced and we will lose it.
+                if (inst->getFault() == NoFault) {
+                    inst->execute();
+                    if (!inst->readPredicate())
+                        inst->forwardOldRegs();
+                }
 
-            // **Add New Entry to the Reuse Buffer After Execution**
-            if (is_non_control && inst->getFault() == NoFault && inst->numSrcRegs()>0  && inst->numDestRegs()>0) {
-                // The operand_values vector is already populated if is_non_control is true
-                // Retrieve the result value
-                std::vector<RegVal> results;
-                DPRINTF(IEW, "get results for buffer store\n");
-                for (int i = 0; i < inst->numDestRegs(); ++i) {
-                    PhysRegIdPtr dest_reg = inst->renamedDestIdx(i);
-                    if (dest_reg->classValue() == IntRegClass || dest_reg->classValue() == FloatRegClass) {
+                
+                // **Add New Entry to the Reuse Buffer After Execution**
+                if (is_non_control && inst->getFault() == NoFault && good) {
+                    // The operand_values vector is already populated if is_non_control is true
+                    // Retrieve the result value
+                    std::vector<RegVal> results;
+                    DPRINTF(IEW, "get results for buffer store\n");
+                    for (int i = 0; i < inst->numDestRegs(); ++i) {
+                        PhysRegIdPtr dest_reg = inst->renamedDestIdx(i);
                         results.push_back(cpu->getReg(dest_reg));
                     }
+                    
+                    DPRINTF(IEW, "before insert is results empty? %d\n\n\n", results.empty());
+                    
+                    // Insert the instruction into the reuse buffer
+                    reuseBuffer.insert(inst_addr, operand_values, results);
                 }
-
-                DPRINTF(IEW, "reuse buffer store\n");
-                
-                // Insert the instruction into the reuse buffer
-                reuseBuffer.insert(inst_addr, operand_values, results);
+                inst->setExecuted();
+                instToCommit(inst);
             }
         }
-    }
 
 
-        updateExeInstStats(inst);
+            updateExeInstStats(inst);
 
-        // Check if branch prediction was correct, if not then we need
-        // to tell commit to squash in flight instructions.  Only
-        // handle this if there hasn't already been something that
-        // redirects fetch in this group of instructions.
+            // Check if branch prediction was correct, if not then we need
+            // to tell commit to squash in flight instructions.  Only
+            // handle this if there hasn't already been something that
+            // redirects fetch in this group of instructions.
 
-        // This probably needs to prioritize the redirects if a different
-        // scheduler is used.  Currently the scheduler schedules the oldest
-        // instruction first, so the branch resolution order will be correct.
-        ThreadID tid = inst->threadNumber;
+            // This probably needs to prioritize the redirects if a different
+            // scheduler is used.  Currently the scheduler schedules the oldest
+            // instruction first, so the branch resolution order will be correct.
+            ThreadID tid = inst->threadNumber;
 
-        if (!fetchRedirect[tid] ||
-            !toCommit->squash[tid] ||
-            toCommit->squashedSeqNum[tid] > inst->seqNum) {
+            if (!fetchRedirect[tid] ||
+                !toCommit->squash[tid] ||
+                toCommit->squashedSeqNum[tid] > inst->seqNum) {
 
-            // Prevent testing for misprediction on load instructions,
-            // that have not been executed.
-            bool loadNotExecuted = !inst->isExecuted() && inst->isLoad();
+                // Prevent testing for misprediction on load instructions,
+                // that have not been executed.
+                bool loadNotExecuted = !inst->isExecuted() && inst->isLoad();
 
-            if (inst->mispredicted() && !loadNotExecuted) {
-                fetchRedirect[tid] = true;
+                if (inst->mispredicted() && !loadNotExecuted) {
+                    fetchRedirect[tid] = true;
 
-                DPRINTF(IEW, "[tid:%i] [sn:%llu] Execute: "
-                        "Branch mispredict detected.\n",
-                        tid, inst->seqNum);
-                DPRINTF(IEW, "[tid:%i] [sn:%llu] "
-                        "Predicted target was PC: %s\n",
-                        tid, inst->seqNum, inst->readPredTarg());
-                DPRINTF(IEW, "[tid:%i] [sn:%llu] Execute: "
-                        "Redirecting fetch to PC: %s\n",
-                        tid, inst->seqNum, inst->pcState());
-                // If incorrect, then signal the ROB that it must be squashed.
-                squashDueToBranch(inst, tid);
+                    DPRINTF(IEW, "[tid:%i] [sn:%llu] Execute: "
+                            "Branch mispredict detected.\n",
+                            tid, inst->seqNum);
+                    DPRINTF(IEW, "[tid:%i] [sn:%llu] "
+                            "Predicted target was PC: %s\n",
+                            tid, inst->seqNum, inst->readPredTarg());
+                    DPRINTF(IEW, "[tid:%i] [sn:%llu] Execute: "
+                            "Redirecting fetch to PC: %s\n",
+                            tid, inst->seqNum, inst->pcState());
+                    // If incorrect, then signal the ROB that it must be squashed.
+                    squashDueToBranch(inst, tid);
 
-                ppMispredict->notify(inst);
+                    ppMispredict->notify(inst);
 
-                if (inst->readPredTaken()) {
-                    iewStats.predictedTakenIncorrect++;
-                } else {
-                    iewStats.predictedNotTakenIncorrect++;
+                    if (inst->readPredTaken()) {
+                        iewStats.predictedTakenIncorrect++;
+                    } else {
+                        iewStats.predictedNotTakenIncorrect++;
+                    }
+                } else if (ldstQueue.violation(tid)) {
+                    assert(inst->isMemRef());
+                    // If there was an ordering violation, then get the
+                    // DynInst that caused the violation.  Note that this
+                    // clears the violation signal.
+                    DynInstPtr violator;
+                    violator = ldstQueue.getMemDepViolator(tid);
+
+                    DPRINTF(IEW, "LDSTQ detected a violation. Violator PC: %s "
+                            "[sn:%lli], inst PC: %s [sn:%lli]. Addr is: %#x.\n",
+                            violator->pcState(), violator->seqNum,
+                            inst->pcState(), inst->seqNum, inst->physEffAddr);
+
+                    fetchRedirect[tid] = true;
+
+                    // Tell the instruction queue that a violation has occured.
+                    instQueue.violation(inst, violator);
+
+                    // Squash.
+                    squashDueToMemOrder(violator, tid);
+
+                    ++iewStats.memOrderViolationEvents;
                 }
-            } else if (ldstQueue.violation(tid)) {
-                assert(inst->isMemRef());
-                // If there was an ordering violation, then get the
-                // DynInst that caused the violation.  Note that this
-                // clears the violation signal.
-                DynInstPtr violator;
-                violator = ldstQueue.getMemDepViolator(tid);
+            } else {
+                // Reset any state associated with redirects that will not
+                // be used.
+                if (ldstQueue.violation(tid)) {
+                    assert(inst->isMemRef());
 
-                DPRINTF(IEW, "LDSTQ detected a violation. Violator PC: %s "
-                        "[sn:%lli], inst PC: %s [sn:%lli]. Addr is: %#x.\n",
-                        violator->pcState(), violator->seqNum,
-                        inst->pcState(), inst->seqNum, inst->physEffAddr);
+                    DynInstPtr violator = ldstQueue.getMemDepViolator(tid);
 
-                fetchRedirect[tid] = true;
+                    DPRINTF(IEW, "LDSTQ detected a violation.  Violator PC: "
+                            "%s, inst PC: %s.  Addr is: %#x.\n",
+                            violator->pcState(), inst->pcState(),
+                            inst->physEffAddr);
+                    DPRINTF(IEW, "Violation will not be handled because "
+                            "already squashing\n");
 
-                // Tell the instruction queue that a violation has occured.
-                instQueue.violation(inst, violator);
-
-                // Squash.
-                squashDueToMemOrder(violator, tid);
-
-                ++iewStats.memOrderViolationEvents;
-            }
-        } else {
-            // Reset any state associated with redirects that will not
-            // be used.
-            if (ldstQueue.violation(tid)) {
-                assert(inst->isMemRef());
-
-                DynInstPtr violator = ldstQueue.getMemDepViolator(tid);
-
-                DPRINTF(IEW, "LDSTQ detected a violation.  Violator PC: "
-                        "%s, inst PC: %s.  Addr is: %#x.\n",
-                        violator->pcState(), inst->pcState(),
-                        inst->physEffAddr);
-                DPRINTF(IEW, "Violation will not be handled because "
-                        "already squashing\n");
-
-                ++iewStats.memOrderViolationEvents;
+                    ++iewStats.memOrderViolationEvents;
+                }
             }
         }
-    }
 
     // Update and record activity if we processed any instructions.
     if (inst_num) {
