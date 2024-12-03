@@ -14,11 +14,29 @@ We’re aiming to see how practical the ReuseBuffer really is and measure how mu
 
 Implementation Details:
 Simulator: We’re using the gem5 simulation environment to build and test our ReuseBuffer.
-CPU Model: Our focus is on the O3CPU, which can simulate out-of-order execution, making it ideal for evaluating advanced scheduling and speculation techniques.Per the paper ICACHE=16K direct mapped and DCACHE=16K, 2 way, 32 byte blocks.
-ISA: We will be using x86
+CPU Model: Our focus is on the O3CPU, which can simulate out-of-order execution, making it ideal for evaluating advanced scheduling and speculation techniques.To simulate a modern processor, both out I and D caches were 32kB with 8-way associativity.
 
-Modifications: We’ve made specific modifications to the O3CPU model to add the ReuseBuffer, enabling it to keep track of intermediate results so they can be dynamically reused in future instructions.
+Modifications: We’ve made specific modifications to the O3CPU model to add the ReuseBuffer, enabling it to keep track of intermediate results so they can be dynamically reused in future instructions. These changed occured in the IEW stage of the O3 pipeline.
 
 Evaluation:
 
-We will be using the following SPEC2017 benchmarks to evaluate performance before and after the reuse buffer is added to the O3CPU [TBD]
+We will be using the following SPEC2017 benchmarks to evaluate performance before and after the reuse buffer is added to the O3CPU:
+    bwaves_s
+    wrf_s
+    cam4_s
+    nab_s
+    fotonik3d_s
+    specrand_fs
+    mcf_s
+    x264_s
+    deepsjeng_s
+    leela_s
+    exchange2_s
+    xz_s
+    specrand_is
+    sjeng
+    astar
+    milc
+    namd
+    leslie3d
+    lbm
