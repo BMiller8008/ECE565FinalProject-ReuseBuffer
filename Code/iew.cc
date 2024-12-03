@@ -146,6 +146,12 @@ IEW::IEWStats::IEWStats(CPU *cpu)
     : statistics::Group(cpu, "iew"),
     ADD_STAT(reusedInsts, statistics::units::Cycle::get(),
              "Number of instructions reused"),
+    ADD_STAT(reusedFloatInsts, statistics::units::Cycle::get(),
+             "Number of float instructions reused"),
+    ADD_STAT(reusedIntInsts, statistics::units::Cycle::get(),
+             "Number of int instructions reused"),
+    ADD_STAT(reusedVecInsts, statistics::units::Cycle::get(),
+             "Number of vector instructions reused"),
     ADD_STAT(idleCycles, statistics::units::Cycle::get(),
              "Number of cycles IEW is idle"),
     ADD_STAT(squashCycles, statistics::units::Cycle::get(),
@@ -1265,8 +1271,11 @@ IEW::executeInsts()
         else {
             bool reused = false;
             Addr inst_addr = inst->pcState().instAddr();
-            //bool is_non_control = !inst->isControl();
-            bool is_non_control = inst->isInteger() || inst->isFloating();
+            // bool is_reusable = !inst->isControl();
+            bool is_vector = inst->isVector();
+            bool is_float = inst->isFloating();
+            bool is_int = inst->isInteger();
+            bool is_reusable = is_vector || is_float || is_int;
             bool good = inst->numDestRegs()>0 && inst->numSrcRegs()>0;
             if (good){
                 for (int i=0; i < inst->numSrcRegs(); i++){
@@ -1288,7 +1297,7 @@ IEW::executeInsts()
             std::vector<RegVal> operand_values;
 
             // **Reuse Buffer Check for Non-Branch Instructions**
-            if (is_non_control && good) {
+            if (is_reusable && good) {
                 DPRINTF(IEW, "reuse check\n");
                 // Retrieve operand values
                 DPRINTF(IEW, "integer %d and float %d\n",inst->isInteger(),inst->isFloating());
@@ -1326,6 +1335,13 @@ IEW::executeInsts()
                     activityThisCycle();
                     reused = true;
                     ++iewStats.reusedInsts;
+                    if (is_vector){
+                        ++iewStats.reusedVecInsts;
+                    } else if (is_int){
+                        ++iewStats.reusedIntInsts;
+                    }else if (is_float){
+                        ++iewStats.reusedFloatInsts;
+                    }
                 }
             }
 
@@ -1343,8 +1359,8 @@ IEW::executeInsts()
 
                 
                 // **Add New Entry to the Reuse Buffer After Execution**
-                if (is_non_control && inst->getFault() == NoFault && good) {
-                    // The operand_values vector is already populated if is_non_control is true
+                if (is_reusable && inst->getFault() == NoFault && good) {
+                    // The operand_values vector is already populated if is_reusable is true
                     // Retrieve the result value
                     std::vector<RegVal> results;
                     DPRINTF(IEW, "get results for buffer store\n");

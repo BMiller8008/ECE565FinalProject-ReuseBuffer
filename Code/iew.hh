@@ -424,6 +424,12 @@ class IEW
         IEWStats(CPU *cpu);
         /** Stat for total number of reused instructions. */
         statistics::Scalar reusedInsts;
+        /** Stat for total number of reused float instructions. */
+        statistics::Scalar reusedFloatInsts;
+        /** Stat for total number of reused int instructions. */
+        statistics::Scalar reusedIntInsts;
+        /** Stat for total number of reused vector instructions. */
+        statistics::Scalar reusedVecInsts;
         /** Stat for total number of idle cycles. */
         statistics::Scalar idleCycles;
         /** Stat for total number of squashing cycles. */
