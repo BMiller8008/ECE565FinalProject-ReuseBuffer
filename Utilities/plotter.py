@@ -1,6 +1,7 @@
 import os
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib import cm
 
 def parse_stats_file(file_path):
     """Parse a gem5 stats file and return relevant statistics as a dictionary."""
@@ -34,22 +35,23 @@ def plot_grouped_bar_comparison(stat_key, stats1, stats2, labels, title, ylabel)
     # X-axis positions
     x = np.arange(len(labels))
     bar_width = 0.35
+    colors = cm.tab20.colors  # Use a colormap
 
     plt.figure(figsize=(10, 6))
-    bars1 = plt.bar(x - bar_width / 2, values1, bar_width, label='O3 CPU', color='blue', alpha=0.7)
-    bars2 = plt.bar(x + bar_width / 2, values2, bar_width, label='Modified CPU', color='orange', alpha=0.7)
+    bars1 = plt.bar(x - bar_width / 2, values1, bar_width, label='O3 CPU', color=colors[0], alpha=0.85)
+    bars2 = plt.bar(x + bar_width / 2, values2, bar_width, label='Modified CPU', color=colors[1], alpha=0.85)
 
     # Add value labels to bars
     add_value_labels(bars1)
     add_value_labels(bars2)
 
-    plt.xticks(x, labels, rotation=45, ha='right')
-    plt.title(title)
-    plt.xlabel('Benchmark')
-    plt.ylabel(ylabel)
-    plt.legend()
-    plt.tight_layout()
+    plt.xticks(x, labels, rotation=45, ha='right', fontsize=10)
+    plt.title(title, fontsize=14, fontweight='bold')
+    plt.xlabel('Benchmark', fontsize=12)
+    plt.ylabel(ylabel, fontsize=12)
+    plt.legend(fontsize=10)
     plt.grid(axis='y', linestyle='--', alpha=0.7)
+    plt.tight_layout()
     plt.show()
 
 def plot_stacked_bar_comparison(stats, labels, title):
@@ -64,22 +66,19 @@ def plot_stacked_bar_comparison(stats, labels, title):
 
     x = np.arange(len(labels))
     bar_width = 0.6
+    colors = cm.tab10.colors  # Use a colormap
 
     plt.figure(figsize=(10, 6))
-    bars1 = plt.bar(x, percentages_floats, bar_width, label='Reused Float Instructions', color='skyblue')
-    bars2 = plt.bar(x, percentages_ints, bar_width, bottom=percentages_floats, label='Reused Int Instructions', color='orange')
+    bars1 = plt.bar(x, percentages_floats, bar_width, label='Reused Float Instructions', color=colors[2])
+    bars2 = plt.bar(x, percentages_ints, bar_width, bottom=percentages_floats, label='Reused Int Instructions', color=colors[3])
 
-    # Add value labels
-    add_value_labels(bars1, percentages=True)
-    add_value_labels(bars2, percentages=True)
-
-    plt.xticks(x, labels, rotation=45, ha='right')
-    plt.title(title)
-    plt.xlabel('Benchmark')
-    plt.ylabel('Percentage of Reused Instructions (%)')
-    plt.legend()
-    plt.tight_layout()
+    plt.xticks(x, labels, rotation=45, ha='right', fontsize=10)
+    plt.title(title, fontsize=14, fontweight='bold')
+    plt.xlabel('Benchmark', fontsize=12)
+    plt.ylabel('Percentage of Reused Instructions (%)', fontsize=12)
+    plt.legend(fontsize=10)
     plt.grid(axis='y', linestyle='--', alpha=0.7)
+    plt.tight_layout()
     plt.show()
 
 def plot_modified_cpu_only(stat_key, stats, labels, title, ylabel):
@@ -89,28 +88,30 @@ def plot_modified_cpu_only(stat_key, stats, labels, title, ylabel):
     # X-axis positions
     x = np.arange(len(labels))
     bar_width = 0.6
+    colors = cm.tab20.colors  # Use a colormap
 
     plt.figure(figsize=(10, 6))
-    bars = plt.bar(x, values, bar_width, label='Modified CPU', color='orange', alpha=0.7)
+    bars = plt.bar(x, values, bar_width, label='Modified CPU', color=colors[4], alpha=0.85)
 
     # Add value labels to bars
     add_value_labels(bars)
 
-    plt.xticks(x, labels, rotation=45, ha='right')
-    plt.title(title)
-    plt.xlabel('Benchmark')
-    plt.ylabel(ylabel)
-    plt.legend()
-    plt.tight_layout()
+    plt.xticks(x, labels, rotation=45, ha='right', fontsize=10)
+    plt.title(title, fontsize=14, fontweight='bold')
+    plt.xlabel('Benchmark', fontsize=12)
+    plt.ylabel(ylabel, fontsize=12)
+    plt.legend(fontsize=10)
     plt.grid(axis='y', linestyle='--', alpha=0.7)
+    plt.tight_layout()
     plt.show()
 
 def main(base_dir1, files1, base_dir2, files2):
     stats_set1 = [parse_stats_file(os.path.join(base_dir1, f)) for f in files1]
     stats_set2 = [parse_stats_file(os.path.join(base_dir2, f)) for f in files2]
 
-    # Labels for the x-axis
-    labels = [os.path.basename(f) for f in files1]
+    # Labels for the x-axis without `.txt`
+    labels = [os.path.basename(f).replace('.txt', '') for f in files1]
+    reuse_labels = [os.path.basename(f).replace('.txt', '') for f in files2]
 
     # Plot IPC comparison
     plot_grouped_bar_comparison('system.cpu.ipc', stats_set1, stats_set2, labels,
@@ -124,20 +125,16 @@ def main(base_dir1, files1, base_dir2, files2):
     plot_grouped_bar_comparison('system.cpu.cpi', stats_set1, stats_set2, labels,
                                 'CPI Comparison (Base: O3 CPU)', 'CPI')
 
-    # Labels for reuse benchmarks (modified CPU only)
-    reuse_labels = [os.path.basename(f) for f in files2]
+    # Plot stacked bar comparison for reused instructions
+    plot_stacked_bar_comparison(stats_set2, reuse_labels, 'Reused Instruction Breakdown')
 
-    # Plot reuse benchmarks for the modified CPU
-    plot_stacked_bar_comparison(stats_set2, reuse_labels,
-                                'Reused Instruction Breakdown (Modified CPU)')
-    
-     # Plot reuse benchmarks for the modified CPU
+    # Plot reused instructions (modified CPU only)
     plot_modified_cpu_only('system.cpu.iew.reusedInsts', stats_set2, reuse_labels,
-                           'Reused Instructions (Modified CPU)', 'Reused Instructions')
+                           'Total Reused Instructions', 'Reused Instructions')
     plot_modified_cpu_only('system.cpu.iew.reusedFloatInsts', stats_set2, reuse_labels,
-                           'Reused Floating-Point Instructions (Modified CPU)', 'Reused Float Instructions')
+                           'Reused Floating-Point Instructions', 'Reused Float Instructions')
     plot_modified_cpu_only('system.cpu.iew.reusedIntInsts', stats_set2, reuse_labels,
-                           'Reused Integer Instructions (Modified CPU)', 'Reused Int Instructions')
+                           'Reused Integer Instructions', 'Reused Int Instructions')
 
 if __name__ == "__main__":
     base_dir1 = "Base_Benchmarks/Single_Core/"
