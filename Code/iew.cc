@@ -1268,119 +1268,121 @@ IEW::executeInsts()
             }
 
         }
-        else {
-            bool reused = false;
-            Addr inst_addr = inst->pcState().instAddr();
-            // bool is_reusable = !inst->isControl();
-            bool is_vector = inst->isVector();
-            bool is_float = inst->isFloating();
-            bool is_int = inst->isInteger();
-            bool is_reusable = is_vector || is_float || is_int;
-            bool good = inst->numDestRegs()>0 && inst->numSrcRegs()>0;
-            if (good){
-                for (int i=0; i < inst->numSrcRegs(); i++){
-                    const PhysRegIdPtr reg = inst->renamedSrcIdx(i);
-                    if (!(reg->classValue() == IntRegClass || reg->classValue() == FloatRegClass)){
-                        good = false;
-                        break;
-                    }
-                }
-                for (int i=0; i < inst->numDestRegs(); i++){
-                    const PhysRegIdPtr reg = inst->renamedDestIdx(i);
-                    if (!(reg->classValue() == IntRegClass || reg->classValue() == FloatRegClass)){
-                        good = false;
-                        break;
-                    }
-                }
+else {
+    bool reused = false;
+    Addr inst_addr = inst->pcState().instAddr();
+
+    bool is_float = inst->isFloating();
+    // Only float instructions are considered reusable now
+    bool is_reusable = is_float;
+
+    bool good = (inst->numDestRegs() > 0 && inst->numSrcRegs() > 0);
+    if (good) {
+        for (int i = 0; i < inst->numSrcRegs(); i++) {
+            const PhysRegIdPtr reg = inst->renamedSrcIdx(i);
+            if (!(reg->classValue() == FloatRegClass)) {
+                good = false;
+                break;
             }
-            
-            std::vector<RegVal> operand_values;
-
-            // **Reuse Buffer Check for Non-Branch Instructions**
-            if (is_reusable && good) {
-                DPRINTF(IEW, "reuse check\n");
-                // Retrieve operand values
-                DPRINTF(IEW, "integer %d and float %d\n",inst->isInteger(),inst->isFloating());
-                DPRINTF(IEW, "num source reg %d and num dest regs %d\n",inst->numSrcRegs(),inst->numDestRegs());
-                for (int i = 0; i < inst->numSrcRegs(); ++i) {
-                    const PhysRegIdPtr reg = inst->renamedSrcIdx(i);
-                    DPRINTF(IEW, "source register class renamed type %d.\n", reg->classValue());
-                    RegVal val = cpu->getReg(reg);
-                    operand_values.push_back(val);
-                }
-                // Check if the instruction with these operands exists in the reuse buffer
-                if (reuseBuffer.contains(inst_addr, operand_values)) {
-                    // Reuse buffer hit; retrieve the result
-                    DPRINTF(IEW, "how many operand values, %d", operand_values.size());
-                    DPRINTF(IEW, "[tid:%i] Instruction [sn:%llu] matched in reuse buffer, "
-                            "skipping execution.\n", inst->threadNumber, inst->seqNum);
-                    std::vector<RegVal> results = reuseBuffer.getResults(inst_addr, operand_values);
-                    DPRINTF(IEW, "Gets to after results");
-                    // Write the result to the destination physical registers
-                    for (int i = 0; i < inst->numDestRegs(); ++i) {
-                        DPRINTF(IEW, "Gets to inside for loop");
-                        PhysRegIdPtr dest_reg = inst->renamedDestIdx(i);
-                        DPRINTF(IEW, "dest register %d.\n", dest_reg->classValue());
-                        DPRINTF(IEW, "set reg before");
-                        
-                        DPRINTF(IEW, "set reg after");
-                        scoreboard->setReg(dest_reg);
-                    }
-                    inst->setResult(results);
-                    if (!inst->readPredicate())
-                        inst->forwardOldRegs();
-                    // Mark the instruction as executed and ready to commit
-                    inst->setExecuted();
-                    instToCommit(inst);
-                    activityThisCycle();
-                    reused = true;
-                    ++iewStats.reusedInsts;
-                    if (is_vector){
-                        ++iewStats.reusedVecInsts;
-                    } else if (is_int){
-                        ++iewStats.reusedIntInsts;
-                    }else if (is_float){
-                        ++iewStats.reusedFloatInsts;
-                    }
-                }
+        }
+        for (int i = 0; i < inst->numDestRegs(); i++) {
+            const PhysRegIdPtr reg = inst->renamedDestIdx(i);
+            if (!(reg->classValue() == FloatRegClass)) {
+                good = false;
+                break;
             }
+        }
+    }
 
-            // **Normal Execution Path**
-            if (!reused) {
-                // If the instruction has already faulted, then skip executing it.
-                // Such case can happen when it faulted during ITLB translation.
-                // If we execute the instruction (even if it's a nop) the fault
-                // will be replaced and we will lose it.
-                if (inst->getFault() == NoFault) {
-                    inst->execute();
-                    if (!inst->readPredicate())
-                        inst->forwardOldRegs();
-                }
+    std::vector<RegVal> operand_values;
 
-                
-                // **Add New Entry to the Reuse Buffer After Execution**
-                if (is_reusable && inst->getFault() == NoFault && good) {
-                    // The operand_values vector is already populated if is_reusable is true
-                    // Retrieve the result value
-                    std::vector<RegVal> results;
-                    DPRINTF(IEW, "get results for buffer store\n");
-                    for (int i = 0; i < inst->numDestRegs(); ++i) {
-                        PhysRegIdPtr dest_reg = inst->renamedDestIdx(i);
-                        results.push_back(cpu->getReg(dest_reg));
-                    }
-                    
-                    DPRINTF(IEW, "before insert is results empty? %d\n\n\n", results.empty());
-                    
-                    // Insert the instruction into the reuse buffer
-                    reuseBuffer.insert(inst_addr, operand_values, results);
-                }
-                inst->setExecuted();
-                instToCommit(inst);
+    // Track stalls using a static map: seqNum -> bool
+    static std::unordered_map<InstSeqNum, bool> stalledBefore;
+
+    // **Reuse Buffer Check for Floating-Point Instructions**
+    if (is_reusable && good) {
+        DPRINTF(IEW, "Reuse check for floating-point instruction\n");
+        DPRINTF(IEW, "num source regs %d and num dest regs %d\n",
+                inst->numSrcRegs(), inst->numDestRegs());
+
+        // Retrieve operand values
+        for (int i = 0; i < inst->numSrcRegs(); ++i) {
+            RegVal val = inst->getRegOperand(inst->staticInst.get(), i);
+            operand_values.push_back(val);
+        }
+
+        // Check if instruction is in the reuse buffer
+        if (reuseBuffer.contains(inst_addr, operand_values)) {
+            DPRINTF(IEW, "[tid:%i] Instruction [sn:%llu] found in RB, executing now.\n",
+                    inst->threadNumber, inst->seqNum);
+            // executing normally without adding a stall
+            if (inst->getFault() == NoFault) {
+                inst->execute();
+            }
+            reused = true;
+            ++iewStats.reusedInsts;
+            // Only floating point instructions are considered, so no vector or int increments
+            ++iewStats.reusedFloatInsts;
+        }
+    }
+
+    // **Normal Execution Path**
+    if (!reused) {
+        // If not in RB and is reusable (float) and good
+        bool shouldStall = false;
+        if (is_reusable && good && !reuseBuffer.contains(inst_addr, operand_values)) {
+            // Check if we have stalled this inst before
+            if (stalledBefore.find(inst->seqNum) == stalledBefore.end()) {
+                // First time missing RB, stall this cycle
+                shouldStall = true;
+                stalledBefore[inst->seqNum] = true;
+            } else {
+                // Already stalled once, now proceed
+                shouldStall = false;
             }
         }
 
+        if (shouldStall) {
+            DPRINTF(IEW, "Stalling floating-point instruction [sn:%llu] this cycle.\n", inst->seqNum);
+            // Skip execution this cycle, assuming instruction remains in pipeline for next cycle
+            continue;
+        }
 
-            updateExeInstStats(inst);
+        // If we reach here, either not reusable, already stalled, or in RB
+        if (inst->getFault() == NoFault) {
+            inst->execute();
+            if (!inst->readPredicate())
+                inst->forwardOldRegs();
+        }
+
+        // After execution, add to RB if float and good
+        if (is_reusable && inst->getFault() == NoFault && good) {
+            if (operand_values.empty()) {
+                for (int i = 0; i < inst->numSrcRegs(); ++i) {
+                    RegVal val = inst->getRegOperand(inst->staticInst.get(), i);
+                    operand_values.push_back(val);
+                }
+            }
+
+            std::vector<RegVal> results;
+            DPRINTF(IEW, "get results for RB store\n");
+            for (int i = 0; i < inst->numDestRegs(); ++i) {
+                RegVal result = inst->getRegOperand(inst->staticInst.get(), i);
+                results.push_back(result);
+            }
+
+            DPRINTF(IEW, "before insert is results empty? %d\n", (int)results.empty());
+
+            reuseBuffer.insert(inst_addr, operand_values, results);
+        }
+
+        inst->setExecuted();
+        instToCommit(inst);
+    }
+}
+
+updateExeInstStats(inst);
+
 
             // Check if branch prediction was correct, if not then we need
             // to tell commit to squash in flight instructions.  Only
